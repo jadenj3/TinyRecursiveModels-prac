@@ -285,11 +285,15 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
             batch  # Pass batch so it can use llm_hidden_state!
         )
 
+        # Create current_data WITHOUT llm_hidden_state
+        # Only include keys that will be present in future batches
+        current_data = {k: torch.empty_like(v) for k, v in batch.items() if k != 'llm_hidden_state'}
+
         return TinyRecursiveReasoningModel_ACTV1Carry(
             inner_carry=initial_inner_carry,
             steps=torch.zeros((batch_size,), dtype=torch.int32),
             halted=torch.ones((batch_size,), dtype=torch.bool),
-            current_data={k: torch.empty_like(v) for k, v in batch.items()}
+            current_data=current_data
         )
 
 
