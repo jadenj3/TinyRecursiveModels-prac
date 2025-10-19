@@ -122,7 +122,8 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
         super().__init__()
         self.config = config
         self.forward_dtype = getattr(torch, self.config.forward_dtype)
-        self.llm_projection = CastedLinear(3584, self.config.hidden_size, bias=True, cast_to=self.forward_dtype)
+        self.llm_projection = nn.Linear(3584, self.config.hidden_size)
+        self.llm_projection = self.llm_projection.to(dtype=self.forward_dtype)
         # I/O
 
         self.embed_scale = math.sqrt(self.config.hidden_size)
