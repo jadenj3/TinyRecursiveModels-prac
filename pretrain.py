@@ -5,7 +5,7 @@ import math
 import yaml
 import shutil
 import copy
-
+from transformers import AutoModel, AutoTokenizer
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -286,6 +286,23 @@ def create_evaluators(config: PretrainConfig, eval_metadata: PuzzleDatasetMetada
 
     return evaluators
 
+
+
+def tensor_to_sudoku_string(tensor):
+    """Convert 9x9 tensor to structured string for LLM"""
+    lines = []
+    for i in range(9):
+        row = []
+        for j in range(9):
+            val = tensor[i, j].item()
+            row.append(str(val) if val != 1 else '_')  # Changed: val != 1
+            if j in [2, 5]:
+                row.append('|')
+        lines.append(' '.join(row))
+        if i in [2, 5]:
+            lines.append('-' * 21)
+    return '\n'.join(lines)
+
 def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, global_batch_size: int, rank: int, world_size: int):
     train_state.step += 1
     if train_state.step > train_state.total_steps:  # At most train_total_steps
@@ -293,6 +310,32 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
 
     # To device
     batch = {k: v.cuda() for k, v in batch.items()}
+
+    board_string = tensor_to_sudoku_string(batch['inputs'])
+
+    model_name = "Qwen/Qwen2.5-7B"  # or "meta-llama/Llama-3.1-8B"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto"
+    )
+
+    # Tokenize your input
+    text = f"Solve this Sudoku puzzle: \n {board_string}"
+    inputs = tokenizer(text, return_tensors="pt").to(model.device)
+
+    # Get hidden states
+    with torch.no_grad():
+        outputs = model(**inputs, output_hidden_states=True)
+
+        # Extract what you need:
+        last_hidden_state = outputs.last_hidden_state  # (batch, seq_len, hidden_dim)
+        # OR
+        all_hidden_states = outputs.hidden_states  # Tuple of all layer outputs
+        # all_hidden_states[-1] == last_hidden_state
+
+
 
     # Init carry if it is None
     if train_state.carry is None:

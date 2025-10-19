@@ -103,6 +103,8 @@ class TinyRecursiveReasoningModel_ACTV1Block(nn.Module):
         hidden_states = rms_norm(hidden_states + out, variance_epsilon=self.norm_eps)
         return hidden_states
 
+
+
 class TinyRecursiveReasoningModel_ACTV1ReasoningModule(nn.Module):
     def __init__(self, layers: List[TinyRecursiveReasoningModel_ACTV1Block]):
         super().__init__()
