@@ -331,12 +331,14 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
 
 
 
-    batch['llm_hidden_state'] = outputs.last_hidden_state
+    llm_hidden_state = outputs.last_hidden_state
 
     # Init carry if it is None
     if train_state.carry is None:
         with torch.device("cuda"):
-            train_state.carry = train_state.model.initial_carry(batch)  # type: ignore
+            batch_with_llm = {**batch, 'llm_hidden_state': llm_hidden_state}
+            train_state.carry = train_state.model.initial_carry(batch_with_llm)  # type: ignore
+            # Don't keep llm_hidden_state in the batch after initialization
 
     del batch['llm_hidden_state']
 
