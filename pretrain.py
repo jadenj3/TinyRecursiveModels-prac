@@ -340,8 +340,6 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
             train_state.carry = train_state.model.initial_carry(batch_with_llm)  # type: ignore
             # Don't keep llm_hidden_state in the batch after initialization
 
-    del batch['llm_hidden_state']
-
     # Forward
     train_state.carry, loss, metrics, _, _ = train_state.model(carry=train_state.carry, batch=batch, return_keys=[])
 
