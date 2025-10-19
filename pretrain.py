@@ -288,20 +288,14 @@ def create_evaluators(config: PretrainConfig, eval_metadata: PuzzleDatasetMetada
 
 
 
-def tensor_to_sudoku_string(tensor):
-    """Convert 9x9 tensor to structured string for LLM"""
-    lines = []
+def tensor_to_sudoku_string(tensor, empty_value=1):
+    """Just the 81 cells, no formatting"""
+    vals = []
     for i in range(9):
-        row = []
         for j in range(9):
             val = tensor[i, j].item()
-            row.append(str(val) if val != 1 else '_')  # Changed: val != 1
-            if j in [2, 5]:
-                row.append('|')
-        lines.append(' '.join(row))
-        if i in [2, 5]:
-            lines.append('-' * 21)
-    return '\n'.join(lines)
+            vals.append(str(val) if val != empty_value else '_')
+    return ' '.join(vals)
 
 def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, global_batch_size: int, rank: int, world_size: int):
     train_state.step += 1
@@ -337,10 +331,14 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
 
 
 
+    batch['llm_hidden_state'] = outputs.last_hidden_state
+
     # Init carry if it is None
     if train_state.carry is None:
         with torch.device("cuda"):
             train_state.carry = train_state.model.initial_carry(batch)  # type: ignore
+
+    del batch['llm_hidden_state']
 
     # Forward
     train_state.carry, loss, metrics, _, _ = train_state.model(carry=train_state.carry, batch=batch, return_keys=[])
