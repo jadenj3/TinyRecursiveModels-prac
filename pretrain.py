@@ -306,14 +306,6 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
     batch = {k: v.cuda() for k, v in batch.items()}
 
     board_string = tensor_to_sudoku_string(batch['inputs'])
-    if train_state.step == 1:
-        model_name = "Qwen/Qwen2.5-7B"  # or "meta-llama/Llama-3.1-8B"
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModel.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16,
-            device_map="auto"
-        )
 
     # Tokenize your input
     text = f"Solve this Sudoku puzzle: \n {board_string}"
