@@ -203,14 +203,18 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
 
             # Take first 81 positions (one per sudoku cell)
             cell_hidden = llm_hidden[:, :81, :]  # [batch, 81, 3584]
-            cell_hidden = cell_hidden.to(self.forward_dtype)
 
+            # Convert to the model's forward dtype before projection
+            cell_hidden = cell_hidden.to(self.forward_dtype)
 
             # Project to your hidden dimension
             cell_projected = self.llm_projection(cell_hidden)  # [batch, 81, 512]
 
+            # Get the actual batch size from cell_projected
+            batch_size = cell_projected.shape[0]
+
             # Create init for puzzle embedding (first 16 positions)
-            puzzle_init = self.H_init.unsqueeze(0).expand(reset_flag.shape[0], 16, -1)
+            puzzle_init = self.H_init.unsqueeze(0).unsqueeze(0).expand(batch_size, 16, -1)
 
             # Concatenate: [16 puzzle] + [81 cells] = 97 total
             H_init = torch.cat([puzzle_init, cell_projected], dim=1)
