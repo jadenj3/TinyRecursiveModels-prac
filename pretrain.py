@@ -297,7 +297,7 @@ def tensor_to_sudoku_string(tensor, empty_value=1):
             vals.append(str(val) if val != empty_value else '_')
     return ' '.join(vals)
 
-def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, global_batch_size: int, rank: int, world_size: int):
+def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, global_batch_size: int, rank: int, world_size: int, model, tokenizer):
     train_state.step += 1
     if train_state.step > train_state.total_steps:  # At most train_total_steps
         return
@@ -306,14 +306,14 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
     batch = {k: v.cuda() for k, v in batch.items()}
 
     board_string = tensor_to_sudoku_string(batch['inputs'])
-
-    model_name = "Qwen/Qwen2.5-7B"  # or "meta-llama/Llama-3.1-8B"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,
-        device_map="auto"
-    )
+    if train_state.step == 1:
+        model_name = "Qwen/Qwen2.5-7B"  # or "meta-llama/Llama-3.1-8B"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModel.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
 
     # Tokenize your input
     text = f"Solve this Sudoku puzzle: \n {board_string}"
@@ -644,8 +644,15 @@ def launch(hydra_config: DictConfig):
         if RANK == 0:
             print("TRAIN")
         train_state.model.train()
+        model_name = "Qwen/Qwen2.5-7B"  # or "meta-llama/Llama-3.1-8B"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModel.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
         for set_name, batch, global_batch_size in train_loader:
-            metrics = train_batch(config, train_state, batch, global_batch_size, rank=RANK, world_size=WORLD_SIZE)
+            metrics = train_batch(config, train_state, batch, global_batch_size, rank=RANK, world_size=WORLD_SIZE, tokenizer=tokenizer, model=model)
 
             if RANK == 0 and metrics is not None:
                 wandb.log(metrics, step=train_state.step)
