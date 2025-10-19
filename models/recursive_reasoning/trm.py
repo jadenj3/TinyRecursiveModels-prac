@@ -202,6 +202,8 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
 
             # Take first 81 positions (one per sudoku cell)
             cell_hidden = llm_hidden[:, :81, :]  # [batch, 81, 3584]
+            cell_hidden = cell_hidden.to(self.forward_dtype)
+
 
             # Project to your hidden dimension
             cell_projected = self.llm_projection(cell_hidden)  # [batch, 81, 512]
