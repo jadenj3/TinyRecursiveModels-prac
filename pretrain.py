@@ -328,12 +328,16 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
     # Init carry if it is None
     if train_state.carry is None:
         with torch.device("cuda"):
-            batch_with_llm = {**batch, 'llm_hidden_state': llm_hidden_state}
-            train_state.carry = train_state.model.initial_carry(batch_with_llm)  # type: ignore
+            train_state.carry = train_state.model.initial_carry(batch, llm_hidden_state)  # type: ignore
             # Don't keep llm_hidden_state in the batch after initialization
 
     # Forward
-    train_state.carry, loss, metrics, _, _ = train_state.model(carry=train_state.carry, batch=batch, return_keys=[])
+    train_state.carry, loss, metrics, _, _ = train_state.model(carry=train_state.carry, batch=batch, return_keys=[], llm_hidden_state = llm_hidden_state)
+
+    projection_weight_norm = train_state.model.model.inner.llm_projection.weight.norm().item()
+    wandb.log({
+        "llm_projection/weight_norm": projection_weight_norm,
+    }, step=train_state.step)
 
     ((1 / global_batch_size) * loss).backward()
 

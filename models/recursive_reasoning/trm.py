@@ -2,6 +2,7 @@ from typing import Tuple, List, Dict, Optional
 from dataclasses import dataclass
 import math
 import torch
+import wandb
 import copy
 import torch.nn.functional as F
 from torch import nn
@@ -190,39 +191,34 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
             z_L=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype),
         )
 
-    def reset_carry(self, reset_flag: torch.Tensor, carry: TinyRecursiveReasoningModel_ACTV1InnerCarry, batch: Dict[str, torch.Tensor]):
+    def reset_carry(self, reset_flag: torch.Tensor, carry: TinyRecursiveReasoningModel_ACTV1InnerCarry, batch: Dict[str, torch.Tensor], llm_hidden_state):
         """
         Args:
             reset_flag: [batch_size] boolean tensor
             carry: previous carry state
             batch: batch dict that may contain 'llm_hidden_state'
         """
-        if 'llm_hidden_state' in batch:
-            # Get LLM hidden states: [batch, seq_len, 3584]
-            llm_hidden = batch['llm_hidden_state']
+        # Get LLM hidden states: [batch, seq_len, 3584]
+        llm_hidden = llm_hidden_state
 
-            # Take first 81 positions (one per sudoku cell)
-            cell_hidden = llm_hidden[:, :81, :]  # [batch, 81, 3584]
+        # Take first 81 positions (one per sudoku cell)
+        cell_hidden = llm_hidden[:, :81, :]  # [batch, 81, 3584]
 
-            # Convert to the model's forward dtype before projection
-            cell_hidden = cell_hidden.to(self.forward_dtype)
+        # Convert to the model's forward dtype before projection
+        cell_hidden = cell_hidden.to(self.forward_dtype)
 
-            # Project to your hidden dimension
-            cell_projected = self.llm_projection(cell_hidden)  # [batch, 81, 512]
+        # Project to your hidden dimension
+        cell_projected = self.llm_projection(cell_hidden)  # [batch, 81, 512]
 
-            # Get the actual batch size from cell_projected
-            batch_size = cell_projected.shape[0]
+        # Get the actual batch size from cell_projected
+        batch_size = cell_projected.shape[0]
 
-            # Create init for puzzle embedding (first 16 positions)
-            puzzle_init = self.H_init.unsqueeze(0).unsqueeze(0).expand(batch_size, 16, -1)
+        # Create init for puzzle embedding (first 16 positions)
+        puzzle_init = self.H_init.unsqueeze(0).unsqueeze(0).expand(batch_size, 16, -1)
 
-            # Concatenate: [16 puzzle] + [81 cells] = 97 total
-            H_init = torch.cat([puzzle_init, cell_projected], dim=1)
-            L_init = torch.cat([puzzle_init, cell_projected], dim=1)
-        else:
-            # No LLM - use default learned init
-            H_init = self.H_init.unsqueeze(0).unsqueeze(0).expand(reset_flag.shape[0], 97, -1)
-            L_init = self.L_init.unsqueeze(0).unsqueeze(0).expand(reset_flag.shape[0], 97, -1)
+        # Concatenate: [16 puzzle] + [81 cells] = 97 total
+        H_init = torch.cat([puzzle_init, cell_projected], dim=1)
+        L_init = torch.cat([puzzle_init, cell_projected], dim=1)
 
         return TinyRecursiveReasoningModel_ACTV1InnerCarry(
             z_H=torch.where(reset_flag.view(-1, 1, 1), H_init, carry.z_H),
@@ -270,7 +266,7 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
     def puzzle_emb(self):
         return self.inner.puzzle_emb
 
-    def initial_carry(self, batch: Dict[str, torch.Tensor]):
+    def initial_carry(self, batch: Dict[str, torch.Tensor], llm_hidden_state):
         batch_size = batch["inputs"].shape[0]
 
         # Create empty carry
@@ -282,7 +278,8 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
         initial_inner_carry = self.inner.reset_carry(
             halted,
             empty_carry,
-            batch  # Pass batch so it can use llm_hidden_state!
+            batch,
+            llm_hidden_state
         )
 
         # Create current_data WITHOUT llm_hidden_state
@@ -297,10 +294,10 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
         )
 
 
-    def forward(self, carry: TinyRecursiveReasoningModel_ACTV1Carry, batch: Dict[str, torch.Tensor]) -> Tuple[TinyRecursiveReasoningModel_ACTV1Carry, Dict[str, torch.Tensor]]:
+    def forward(self, carry: TinyRecursiveReasoningModel_ACTV1Carry, batch: Dict[str, torch.Tensor], llm_hidden_state) -> Tuple[TinyRecursiveReasoningModel_ACTV1Carry, Dict[str, torch.Tensor]]:
 
         # Update data, carry (removing halted sequences)
-        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry, batch)
+        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry, batch, llm_hidden_state)
         
         new_steps = torch.where(carry.halted, 0, carry.steps)
 
